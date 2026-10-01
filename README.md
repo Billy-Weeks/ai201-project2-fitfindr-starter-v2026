@@ -59,24 +59,25 @@
 
 ### `search_listings`
 
-- **What it does:**
-- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" -->
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Searches the listings data using keywords from the description, an optional size, and an optional maximum price.
+- **Inputs:** `description` (`str`) contains the item keywords, describing what the user wants, `size` (`str | None`) is matched case-insensitively, by size token. For example: requested `M` matches `S/M`. `None` disables size filtering;`max_price` (`float | None`) is an inclusive price limit, with `None` disabling price filtering.  
+<!-- name and type each: `max_price` (float), not "a price" -->
+- **Returns:** The tool returns a list of listing dictionaries containing `id`, `title`, `description`, `category`, `style_tags`, `size`, `condition`, `price`, `colors`, `brand`, and `platform`. Description keywords are matched against the listing’s `title`, `description`, `category`, `style_tags`, `colors`, and `brand`, and results are returned best match first.
+- **When it has nothing:** If no listing satisfies the description and optional filters, it returns `[]`, not `None` and not an exception.
 
 ### `suggest_outfit`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Gives suggestions for outfits based on a thrifted item and the user's wardrobe.
+- **Inputs:** `new_item` (`dict`) is a listing dictionary; `wardrobe` (`dict`) contains an `items` list of wardrobe item dictionaries with `id`, `name`, `category`, `colors`, `style_tags`, and optional `notes`.
+- **Returns:** The tool returns a non-empty string containing one or two outfit ideas that explain how the `new_item` could be styled, based on the given wardrobe and "new_item". When the wardrobe has items, the suggestions should reference pieces from that wardrobe.
+- **When it has nothing:** If the wardrobe's `items` list is empty, it should return a non-empty string with general styling advice for the new item instead of raising an exception, or returning `""`.
 
 ### `create_fit_card`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Gives a short caption about the newly suggested fit. Acts like a real post, not just a description of the product.
+- **Inputs:** `outfit` (`str`) is an outfit suggestion string returned from `suggest_outfit()`, `new_item` (`dict`) is a listing dictionary for the item.
+- **Returns:** Returns a string that is a two to four sentence caption that could work as a real post. It should contain the item, its price, platform, and specific vibe it portrays.
+- **When it has nothing:** When `outfit` is empty or only whitespace, it should return a descriptive non-empty message rather than raising an exception or returning `""`.
 
 ---
 
@@ -93,13 +94,14 @@
      The grader checks your code against what you claim here, so the file and
      function have to be real. -->
 
-**Branch rule:**
-
+**Branch rule:** If `search_listings` returns no matches, set `session["error"]` and stop. Otherwise, store the first result in `session["selected_item"]`, call `suggest_outfit`, store its result in `session["outfit_suggestion"]`, and then call `create_fit_card`.
 **Where it lives:** `agent.py::run_agent`
 
 **How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
+The agent uses string processing to recognize price phrases such as `under $30` and size phrases such as `size M`. It converts the price to a float, extracts the size, removes those phrases, and uses the remaining words as the description.
 
 **What moves through the session:** <!-- which fields, in what order -->
+The original query is stored in `session["query"]`. The parsed description, size, and maximum price are stored in `session["parsed"]`. Search results go into `session["search_results"]`; the first result becomes `session["selected_item"]`; the outfit suggestion becomes `session["outfit_suggestion"]`; and the final caption becomes `session["fit_card"]`. If the search is empty, the explanation is stored in `session["error"]` and the later fields remain empty.
 
 ---
 
