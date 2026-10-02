@@ -49,7 +49,7 @@ def new_session(query: str, wardrobe: dict) -> dict:
 
 # ── planning loop ─────────────────────────────────────────────────────────────
 
-def run_agent(query: str, wardrobe: dict) -> dict:
+def _run_agent_scaffold(query: str, wardrobe: dict) -> dict:
     """
     Run the loop once and return the finished session.
 
@@ -113,6 +113,108 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
 
 # ── running it directly ───────────────────────────────────────────────────────
+
+def run_agent(query: str, wardrobe: dict) -> dict:
+    """Run the planning loop and return its visible session state."""
+    session = new_session(query, wardrobe)
+    try:
+        session["parsed"] = _parse_query(session["query"])
+        iteration = 0
+        while session["fit_card"] is None and session["error"] is None:
+            iteration += 1
+            trace.check_iterations(iteration)
+
+            if not session["search_results"]:
+                parsed = session["parsed"]
+                results = search_listings(
+                    parsed["description"], parsed["size"], parsed["max_price"]
+                )
+                session["search_results"] = results
+                trace.step("search_listings", inputs=parsed, returned=results)
+                if not results:
+                    session["error"] = (
+                        "No listings matched that request. Try changing the "
+                        "description, size, or maximum price."
+                    )
+                    trace.step(
+                        "search branch", returned=session["error"],
+                        note="empty results: stopping before suggest_outfit",
+                    )
+                    break
+                session["selected_item"] = session["search_results"][0]
+
+            if session["outfit_suggestion"] is None:
+                session["outfit_suggestion"] = suggest_outfit(
+                    session["selected_item"], session["wardrobe"]
+                )
+                trace.step(
+                    "suggest_outfit",
+                    inputs={"new_item": session["selected_item"],
+                            "wardrobe": session["wardrobe"]},
+                    returned=session["outfit_suggestion"],
+                )
+
+            if session["fit_card"] is None:
+                session["fit_card"] = create_fit_card(
+                    session["outfit_suggestion"], session["selected_item"]
+                )
+                trace.step(
+                    "create_fit_card",
+                    inputs={"outfit": session["outfit_suggestion"],
+                            "new_item": session["selected_item"]},
+                    returned=session["fit_card"],
+                )
+        return session
+    except ModelUnavailable as exc:
+        session["error"] = f"The model was unavailable, so FitFindr stopped: {exc}"
+        return session
+
+
+def _parse_query(query: str) -> dict:
+    """Extract search constraints and leave the item description."""
+    text = (query or "").strip()
+    working = text
+    lowered = working.lower()
+
+    max_price = None
+    price_start = -1
+    for marker in ("under", "below", "up to", "maximum price", "max price"):
+        start = lowered.find(marker)
+        if start >= 0 and (price_start < 0 or start < price_start):
+            price_start = start
+            remainder = working[start + len(marker):].lstrip(" ,:$")
+            amount = remainder.split()[0].rstrip(",.") if remainder else ""
+            try:
+                max_price = float(amount)
+            except ValueError:
+                max_price = None
+            if max_price is not None:
+                end = start + len(marker) + len(working[start + len(marker):]) - len(remainder)
+                end += len(amount)
+                working = working[:start] + " " + working[end:]
+                lowered = working.lower()
+                break
+
+    size = None
+    lowered = working.lower()
+    size_start = lowered.find("size ")
+    if size_start >= 0:
+        phrase_start = size_start
+        if size_start >= 3 and lowered[size_start - 3:size_start] == "in ":
+            phrase_start = size_start - 3
+        after_size = working[size_start + len("size "):].lstrip()
+        size = after_size.split()[0].rstrip(",.") if after_size else None
+        if size:
+            end = size_start + len("size ") + len(working[size_start + len("size "):]) - len(after_size)
+            end += len(size)
+            working = working[:phrase_start] + " " + working[end:]
+
+    return {
+        "description": " ".join(working.strip(" ,").split()),
+        "size": size,
+        "max_price": max_price,
+    }
+
 
 def _show(session: dict) -> None:
     if session["error"]:

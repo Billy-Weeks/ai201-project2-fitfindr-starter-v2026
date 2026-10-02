@@ -97,6 +97,11 @@
 **Branch rule:** If `search_listings` returns no matches, set `session["error"]` and stop. Otherwise, store the first result in `session["selected_item"]`, call `suggest_outfit`, store its result in `session["outfit_suggestion"]`, and then call `create_fit_card`.
 **Where it lives:** `agent.py::run_agent`
 
+The loop stores each tool result immediately in the session. `suggest_outfit`
+reads `session["selected_item"]` and `session["wardrobe"]`, while
+`create_fit_card` reads `session["outfit_suggestion"]` and
+`session["selected_item"]`; neither handoff relies on a direct result variable.
+
 **How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
 The agent uses string processing to recognize price phrases such as `under $30` and size phrases such as `size M`. It converts the price to a float, extracts the size, removes those phrases, and uses the remaining words as the description.
 
