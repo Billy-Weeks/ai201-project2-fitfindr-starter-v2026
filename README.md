@@ -13,8 +13,8 @@
 > python app.py ask 'vintage graphic tee under $30'
 > ```
 >
-> All three tools are stubs, so that last command will do nothing useful yet.
-> That's the starting position.
+> FitFindr now searches the listings, suggests an outfit, and creates a fit
+> card. The command above runs the complete agent when the model is available.
 >
 > **The rest of this file is your submission.** Fill it in as you go.
 
@@ -41,6 +41,12 @@
 
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
 
+FitFindr accepts a plain-language thrift request such as “a vintage graphic tee
+under $30” and searches the local listings data for matching items. It chooses
+the best result, suggests outfits using the user’s wardrobe, and creates a
+short social-ready fit-card caption. If no listing matches, the planning loop
+stops before the model tools and tells the user whether to change the
+description, size, or price limit.
 
 
 ---
@@ -120,7 +126,38 @@ The original query is stored in `session["query"]`. The parsed description, size
 **One full query**
 
 ```
-$ python app.py ask '...'
+$ python app.py ask 'vintage graphic tee under $30'
+[1] search_listings
+      in:  dict with keys: description, size, max_price
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[2] suggest_outfit
+      in:  dict with keys: new_item, wardrobe
+      out: Here are two practical outfits combining your new thrifted Y2K baby tee with pieces from your wardrobe:  **Out…
+[3] create_fit_card
+      in:  dict with keys: outfit, new_item
+      out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's already my new favorite find. I pa…
+
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+
+  Outfit:   Here are two practical outfits combining your new thrifted Y2K baby tee with pieces from your wardrobe:
+
+**Outfit 1: Y2K Streetwear Casual**
+*   **Top:** Y2K Butterfly Baby Tee
+*   **Bottoms:** Baggy straight-leg jeans (dark wash)
+*   **Shoes:** Chunky white sneakers
+*   **Accessories:** Black crossbody bag
+*   **Why it works:** The fitted, cropped silhouette of the baby tee balances the oversized, high-waisted baggy jeans for a classic Y2K streetwear proportion. The white in the sneakers ties the white graphic of the tee together seamlessly.
+
+**Outfit 2: Casual Earth-Tones Minimal**
+*   **Top:** Y2K Butterfly Baby Tee
+*   **Bottoms:** Wide-leg khaki trousers
+*   **Outerwear:** Vintage black denim jacket (worn over the top)
+*   **Shoes:** Chunky white sneakers
+*   **Why it works:** The pink and purple butterfly print pops against neutral khaki trousers. Layering the slightly cropped black denim jacket keeps the waistline defined while adding a grounded, vintage contrast to the soft pastels of the tee.
+
+  Fit card: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's already my new favorite find. I paired it with baggy dark-wash denim and chunky sneakers for the ultimate nostalgic streetwear moment. It gives off the best effortless, early-2000s downtown vibe.
+
+2 model calls this session, 700 prompt + 311 output tokens
 
 ```
 
@@ -154,8 +191,7 @@ Nothing beats the structure of a classic pair of vintage Levi's 501s styled with
 Running the above prompt 3 different times resulted in the same output each time due to `CACHE_ENABLED` being activated. I reran the same tool for 3 more iterations using `AI201_CACHE=0` resulting in 3 uncached captions which were all slightly different from each other:
 
 ```
-(.venv) meznu@BillyLaptop:/mnt/c/CodePath_AI-2/ai201-project2-fitfindr-starter-v2026$ AI201_CACHE=0 python -c 'from tools import create_fit_card; from utils.data_loader import load_listings; item=load_listings()[0]; print(create_fit_card("jeans and white sneakers", item));
---- FIRST RUN ---
+(.venv) meznu@BillyLaptop:/mnt/c/CodePath_AI-2/ai201-project2-fitfindr-starter-v2026$ AI201_CACHE=0 python -c 'from tools import create_fit_card; from utils.data_loader import load_listings; item=load_listings()[0]; print(create_fit_card("jeans and white sneakers", item)); print("--- SECOND RUN ---"); print(create_fit_card("jeans and white sneakers", item)); print("--- THIRD RUN ---"); print(create_fit_card("jeans and white sneakers", item))'
 Just scored these vintage medium-wash Levi's 501s on Depop for $38, and they are the ultimate closet staple. I paired them with my favorite white sneakers for that effortlessly cool, 90s off-duty model vibe. Honestly, nothing beats a perfectly broken-in pair of denim.
 --- SECOND RUN ---
 Scored these vintage Levi's 501s on Depop for just $38 and they fit like an absolute dream. Threw them on with crisp white sneakers for that effortlessly cool, 90s off-duty look. Nothing beats the wash and wear of a truly broken-in pair of denim.
@@ -176,15 +212,15 @@ Scored these vintage Levi's 501s on Depop for just $38 and I'm obsessed. Paired 
 
 **Moment 1**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I asked Codex, why `create_fit_card` returned the exact same caption three times even though `TEMPERATURE` was set to `0.9`.
+- *What came back:* The response explained that `CACHE_ENABLED` was reusing the cached answer before the temperature setting could create variation.
+- *What I changed:* I reran the test with `AI201_CACHE=0`, confirmed that the three captions varied, and added the comparison to the `Sample Run` section of `README.md`.
 
 **Moment 2**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I asked Codex for help with implementing the string parsing logic in `run_agent` that followed the method that was laid out previously in milestone 2
+- *What came back:* It returned a complicated parse which included regex which was not part of the way I indicated the string would be parsed.
+- *What I changed:* I went through the logic and adjusted it to exclude regex and only include simple string parsing.
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 

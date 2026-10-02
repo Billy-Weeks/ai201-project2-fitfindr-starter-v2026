@@ -74,7 +74,7 @@ The planning loop must carry the search result through session state so the next
      mentions the price? Two different items producing the same opening
      sentence? A card longer than a caption anyone would post? Any of those can
      be turned into a number. -->
-For five matching queries, at least 4 of 5 `create_fit_card` results are non-empty captions of 2–4 sentences that mention the selected item, its price, and its platform.
+For five matching queries, at least 4 of 5 `create_fit_card` results are non-empty captions of 2–4 sentences that mentions a word from the listing's `title`, its price `$<price>`, and its `platform` name.
 
 **Why this target:**
 The fit-card tool should create a short, social-ready caption tied to the actual listings data. The 4-of-5 target allows for occasional model variation.
