@@ -28,6 +28,7 @@ tool calls and returns a fit card — in at least 4 of 5 tries.
 <!-- Why 4 of 5 and not 5 of 5? Something about your search, probably —
      "my search is a plain keyword match and some phrasings will miss" is a
      real answer. -->
+The search uses keyword matching, and the outfit and fit-card tools rely on model-generated responses, so occasional variation is possible. Requiring success in 4 of 5 tries still shows that the planning loop reliably carries a matching listing through all three tools.
 
 ---
 
@@ -39,6 +40,7 @@ Given a query that matches no listings, the agent stops before calling
 **Why this target:**
 <!-- Why is 5 of 5 reasonable here when criterion 1 isn't? What's different
      about this path? -->
+An empty search is a deterministic branch that should not depend on model-generated output. Requiring success in 5 of 5 tries ensures the loop consistently stops before calling `suggest_outfit` without an item and gives the user an actionable message.
 
 ---
 
@@ -53,12 +55,10 @@ Given a query that matches no listings, the agent stops before calling
      look like state failure — it looks like a tool problem. Something that
      compares session["selected_item"] against what actually reached
      suggest_outfit is the shape you're after. -->
-
-
+In 5 of 5 matching-query runs, the listing stored in `session["selected_item"]` is exactly equal to the `new_item` received by `suggest_outfit`.
 
 **Why this target:**
-
-
+The planning loop must carry the search result through session state so the next tool receives the correct item without the user repeating it.
 
 ---
 
@@ -74,12 +74,10 @@ Given a query that matches no listings, the agent stops before calling
      mentions the price? Two different items producing the same opening
      sentence? A card longer than a caption anyone would post? Any of those can
      be turned into a number. -->
-
-
+For five matching queries, at least 4 of 5 `create_fit_card` results are non-empty captions of 2–4 sentences that mention the selected item, its price, and its platform.
 
 **Why this target:**
-
-
+The fit-card tool should create a short, social-ready caption tied to the actual listings data. The 4-of-5 target allows for occasional model variation.
 
 ---
 
@@ -91,12 +89,10 @@ Given a query that matches no listings, the agent stops before calling
      wardrobe path, what happens when the model can't be reached, whether the
      search respects a price ceiling — anything, as long as it names a number
      or an observable outcome. -->
-
-
+For five searches with a `max_price` that each return at least one listing, every listing returned by `search_listings` has a price less than or equal to that maximum.
 
 **Why this target:**
-
-
+The maximum price is a direct user requirement, so returning an over-budget listing would make the search unreliable. This deterministic data-filtering behavior should work 5 of 5 times.
 
 ---
 
