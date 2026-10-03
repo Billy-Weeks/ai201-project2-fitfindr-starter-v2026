@@ -52,10 +52,18 @@ description, size, or price limit.
 
 ### Stretch Feature: Price Comparison
 
-I plan to add a fourth tool named `compare_prices`. It will compare the
+I added a fourth tool named `compare_prices`. It will compare the
 selected listing with the other search results and return the lowest, highest,
 and average prices, plus a short comparison message. The planning loop will
 store and display this comparison after searching.
+
+### Stretch Feature: Second Planning Branch
+
+I also added a second planning branch for wardrobe context. If the
+session has saved wardrobe items, the loop will take the saved-wardrobe path;
+otherwise, it will take a general-styling path and let `suggest_outfit` give
+advice without assuming saved pieces. The branch will be visible in the trace
+and tested with `--empty-wardrobe`.
 
 ---
 
@@ -118,6 +126,12 @@ store and display this comparison after searching.
 **Branch rule:** If `search_listings` returns no matches, set `session["error"]` and stop. Otherwise, store the first result in `session["selected_item"]`, call `suggest_outfit`, store its result in `session["outfit_suggestion"]`, and then call `create_fit_card`.
 **Where it lives:** `agent.py::run_agent`
 
+**Second stretch branch:** After a match, `run_agent` checks the wardrobe. A
+non-empty `session["wardrobe"]["items"]` takes the saved-wardrobe path; an
+empty list takes the general-styling path. Both paths call `suggest_outfit`,
+but the trace names which path was selected and the tool uses the corresponding
+wardrobe behavior.
+
 The loop stores each tool result immediately in the session. `suggest_outfit`
 reads `session["selected_item"]` and `session["wardrobe"]`, while
 `create_fit_card` reads `session["outfit_suggestion"]` and
@@ -148,10 +162,14 @@ $ python app.py ask 'vintage graphic tee under $30' --trace
 [2] compare_prices
       in:  dict with keys: selected_item, search_results
       out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
-[3] suggest_outfit
+[3] wardrobe branch
+      in:  dict with keys: saved_item_count
+      out: saved wardrobe
+      →    branch: saved wardrobe
+[4] suggest_outfit
       in:  dict with keys: new_item, wardrobe
       out: Here are two practical outfits combining your new thrifted Y2K baby tee with pieces from your wardrobe:  **Out…
-[4] create_fit_card
+[5] create_fit_card
       in:  dict with keys: outfit, new_item
       out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's already my new favorite find. I pa…
 
@@ -175,9 +193,10 @@ $ python app.py ask 'vintage graphic tee under $30' --trace
 
   Fit card: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's already my new favorite find. I paired it with baggy dark-wash denim and chunky sneakers for the ultimate nostalgic streetwear moment. It gives off the best effortless, early-2000s downtown vibe.
 
+
 ```
 
-**The three tools, tested one at a time**
+**The three tools (plus a stretch tool), tested one at a time**
 
 ```
 (.venv) meznu@BillyLaptop:/mnt/c/CodePath_AI-2/ai201-project2-fitfindr-starter-v2026$ python -c 'from tools import search_listings; print(search_listings("graphic tee", max_price=30))'
@@ -217,11 +236,48 @@ Scored these vintage Levi's 501s on Depop for just $38 and I'm obsessed. Paired 
 
 ---
 
-### Stretch tool: `compare_prices`
+**Stretch tool:** `compare_prices`
 
 ```text
 $ python -c 'from tools import compare_prices, search_listings; results=search_listings("graphic tee", max_price=30); print(compare_prices(results[0], results))'
 {'selected_item_id': 'lst_002', 'selected_price': 18.0, 'comparison_count': 6, 'lowest_price': 15.0, 'highest_price': 27.0, 'average_price': 21.5, 'message': 'The selected item is $18.00, below the search average of $21.50.'}
+```
+
+**Stretch branch:** Empty wardrobe
+```
+$ python app.py ask 'vintage graphic tee under $30' --empty-wardrobe --trace
+(running with an empty wardrobe)
+[1] search_listings
+      in:  dict with keys: description, size, max_price
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[2] compare_prices
+      in:  dict with keys: selected_item, search_results
+      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
+[3] wardrobe branch
+      in:  dict with keys: saved_item_count
+      out: general styling
+      →    branch: empty wardrobe, general styling
+[4] suggest_outfit
+      in:  dict with keys: new_item, wardrobe
+      out: Here are two versatile ways to style your Y2K butterfly baby tee:  ### 1. Casual Y2K Streetwear * **The Pieces…
+[5] create_fit_card
+      in:  dict with keys: outfit, new_item
+      out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's giving major nostalgic streetwear …
+
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+
+  Outfit:   Here are two versatile ways to style your Y2K butterfly baby tee:
+
+### 1. Casual Y2K Streetwear
+* **The Pieces:** Relaxed low-rise or mid-rise straight-leg blue jeans, and retro sneakers (like chunky trainers or canvas low-tops).
+* **Styling Logic:** A baby tee has a naturally fitted, cropped silhouette, so pairing it with looser bottoms creates a flattering proportional contrast. The denim keeps the look grounded while leaning into the nostalgic 2000s aesthetic of the graphic.
+
+### 2. Sweet & Edgy Mix
+* **The Pieces:** A flowy black or pastel midi skirt (satin or tiered cotton) and chunky combat boots or strappy sandals.
+* **Styling Logic:** This bridges the tee's "y2k" and "cottagecore" tags. The fitted top balances the volume of a skirt, while the juxtaposition of a girly butterfly print with tougher boots creates an effortless, balanced outfit.
+
+  Fit card: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's giving major nostalgic streetwear energy. I love styling it with relaxed straight-leg jeans for that classic 2000s proportion play. It’s such an effortless piece to throw on for a sweet yet edgy everyday look.
+
 ```
 
 ---

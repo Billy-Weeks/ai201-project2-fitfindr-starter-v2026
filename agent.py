@@ -37,6 +37,7 @@ def new_session(query: str, wardrobe: dict) -> dict:
     """
     return {
         "price_comparison": None,
+        "wardrobe_path": None,
         "query": query,              # what the user typed
         "parsed": {},                # description / size / max_price you pulled out of it
         "search_results": [],        # everything search_listings returned
@@ -95,6 +96,19 @@ def run_agent(query: str, wardrobe: dict) -> dict:
                 )
 
             if session["outfit_suggestion"] is None:
+                wardrobe_items = (session["wardrobe"] or {}).get("items", [])
+                if wardrobe_items:
+                    session["wardrobe_path"] = "saved wardrobe"
+                    branch_note = "branch: saved wardrobe"
+                else:
+                    session["wardrobe_path"] = "general styling"
+                    branch_note = "branch: empty wardrobe, general styling"
+                trace.step(
+                    "wardrobe branch",
+                    inputs={"saved_item_count": len(wardrobe_items)},
+                    returned=session["wardrobe_path"],
+                    note=branch_note,
+                )
                 session["outfit_suggestion"] = suggest_outfit(
                     session["selected_item"], session["wardrobe"]
                 )
