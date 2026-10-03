@@ -48,6 +48,14 @@ short social-ready fit-card caption. If no listing matches, the planning loop
 stops before the model tools and tells the user whether to change the
 description, size, or price limit.
 
+---
+
+### Stretch Feature: Price Comparison
+
+I plan to add a fourth tool named `compare_prices`. It will compare the
+selected listing with the other search results and return the lowest, highest,
+and average prices, plus a short comparison message. The planning loop will
+store and display this comparison after searching.
 
 ---
 
@@ -84,6 +92,13 @@ description, size, or price limit.
 - **Inputs:** `outfit` (`str`) is an outfit suggestion string returned from `suggest_outfit()`, `new_item` (`dict`) is a listing dictionary for the item.
 - **Returns:** Returns a string that is a two to four sentence caption that could work as a real post. It should contain the item, its price, platform, and specific vibe it portrays.
 - **When it has nothing:** When `outfit` is empty or only whitespace, it should return a descriptive non-empty message rather than raising an exception or returning `""`.
+
+### `compare_prices`
+
+- **What it does:** Compares the selected listing's price with the listings returned by the same search.
+- **Inputs:** `selected_item` (`dict`) is the chosen listing; `search_results` (`list[dict]`) contains the matching listing dictionaries returned by `search_listings`.
+- **Returns:** A dictionary containing `selected_item_id`, `selected_price`, `comparison_count`, `lowest_price`, `highest_price`, `average_price`, and `message`.
+- **When it has nothing:** If the selected item has no numeric price or the comparison list has no numeric prices, it returns the same keys with unavailable numeric values set to `None`, `comparison_count` set to `0`, and an explanatory `message`.
 
 ---
 
@@ -126,14 +141,17 @@ The original query is stored in `session["query"]`. The parsed description, size
 **One full query**
 
 ```
-$ python app.py ask 'vintage graphic tee under $30'
+$ python app.py ask 'vintage graphic tee under $30' --trace
 [1] search_listings
       in:  dict with keys: description, size, max_price
       out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
-[2] suggest_outfit
+[2] compare_prices
+      in:  dict with keys: selected_item, search_results
+      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
+[3] suggest_outfit
       in:  dict with keys: new_item, wardrobe
       out: Here are two practical outfits combining your new thrifted Y2K baby tee with pieces from your wardrobe:  **Out…
-[3] create_fit_card
+[4] create_fit_card
       in:  dict with keys: outfit, new_item
       out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's already my new favorite find. I pa…
 
@@ -156,8 +174,6 @@ $ python app.py ask 'vintage graphic tee under $30'
 *   **Why it works:** The pink and purple butterfly print pops against neutral khaki trousers. Layering the slightly cropped black denim jacket keeps the waistline defined while adding a grounded, vintage contrast to the soft pastels of the tee.
 
   Fit card: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's already my new favorite find. I paired it with baggy dark-wash denim and chunky sneakers for the ultimate nostalgic streetwear moment. It gives off the best effortless, early-2000s downtown vibe.
-
-2 model calls this session, 700 prompt + 311 output tokens
 
 ```
 
@@ -197,6 +213,15 @@ Just scored these vintage medium-wash Levi's 501s on Depop for $38, and they are
 Scored these vintage Levi's 501s on Depop for just $38 and they fit like an absolute dream. Threw them on with crisp white sneakers for that effortlessly cool, 90s off-duty look. Nothing beats the wash and wear of a truly broken-in pair of denim.
 --- THIRD RUN ---
 Scored these vintage Levi's 501s on Depop for just $38 and I'm obsessed. Paired with crisp white sneakers, they give off that effortless, off-duty model aesthetic. It's the ultimate everyday uniform that never goes out of style.
+```
+
+---
+
+### Stretch tool: `compare_prices`
+
+```text
+$ python -c 'from tools import compare_prices, search_listings; results=search_listings("graphic tee", max_price=30); print(compare_prices(results[0], results))'
+{'selected_item_id': 'lst_002', 'selected_price': 18.0, 'comparison_count': 6, 'lowest_price': 15.0, 'highest_price': 27.0, 'average_price': 21.5, 'message': 'The selected item is $18.00, below the search average of $21.50.'}
 ```
 
 ---

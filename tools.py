@@ -295,3 +295,47 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
         prompt,
         system="You write concise, authentic thrift-fashion captions.",
     ).strip()
+
+
+# ── Stretch tool: compare_prices ────────────────────────────────────────────
+
+def compare_prices(selected_item: dict, search_results: list[dict]) -> dict:
+    """Compare the selected listing's price with the search results."""
+    selected_price = selected_item.get("price") if selected_item else None
+    prices = [
+        listing.get("price")
+        for listing in (search_results or [])
+        if isinstance(listing.get("price"), (int, float))
+    ]
+
+    if not isinstance(selected_price, (int, float)) or not prices:
+        return {
+            "selected_item_id": (selected_item or {}).get("id"),
+            "selected_price": None,
+            "comparison_count": 0,
+            "lowest_price": None,
+            "highest_price": None,
+            "average_price": None,
+            "message": "Price comparison is unavailable for these listings.",
+        }
+
+    average_price = round(sum(prices) / len(prices), 2)
+    if selected_price < average_price:
+        position = "below"
+    elif selected_price > average_price:
+        position = "above"
+    else:
+        position = "at"
+
+    return {
+        "selected_item_id": selected_item.get("id"),
+        "selected_price": selected_price,
+        "comparison_count": len(prices),
+        "lowest_price": min(prices),
+        "highest_price": max(prices),
+        "average_price": average_price,
+        "message": (
+            f"The selected item is ${selected_price:.2f}, {position} the "
+            f"search average of ${average_price:.2f}."
+        ),
+    }
