@@ -15,7 +15,8 @@ Build and test your three tools in `tools.py` first. Then come here.
 
 import config
 import trace
-from tools import search_listings, suggest_outfit, create_fit_card, compare_prices
+from mcp_client import call_tool
+from tools import suggest_outfit, create_fit_card, compare_prices
 from generate import ModelUnavailable
 
 
@@ -65,11 +66,9 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
             if not session["search_results"]:
                 parsed = session["parsed"]
-                results = search_listings(
-                    parsed["description"], parsed["size"], parsed["max_price"]
-                )
+                results = call_tool("search_listings", parsed)
                 session["search_results"] = results
-                trace.step("search_listings", inputs=parsed, returned=results)
+                trace.step("search_listings (MCP call)", inputs=parsed, returned=results)
                 if not results:
                     session["error"] = (
                         "No listings matched that request. Try changing the "
