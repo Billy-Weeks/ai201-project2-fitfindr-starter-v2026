@@ -56,6 +56,14 @@ SCENARIOS = [
         "wardrobe": "example",
         "criterion": 5,
     },
+    {
+        # Stretch: no denim jacket comes in XXL, but several exist in other
+        # sizes, so the empty search should retry once without the size.
+        "name": "empty search retries without size",
+        "query": "denim jacket size XXL under $50",
+        "wardrobe": "example",
+        "criterion": None,
+    },
     #
     # Set "criterion" to the number in criteria.md that the scenario tests.
     # "criterion": None means a diagnostic run — useful to have, but it isn't

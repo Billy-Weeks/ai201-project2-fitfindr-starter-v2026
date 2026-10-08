@@ -215,6 +215,10 @@ I restored the original key afterward.
 
 **Empty search**
 
+*This output was captured before the retry stretch was added. The same query
+now retries once without the size filter before stopping; see Stretch run
+evidence below.*
+
 Command: `python app.py ask 'unobtainium moonstone size XXS under $5' --trace`
 
 ```
@@ -333,10 +337,82 @@ Command: `python app.py ask 'unobtainium moonstone size XXS under $5' --trace`
 [3] search branch
       out: No listings matched that request. Try changing the description, size, or maximum price.
       →    empty results: stopping before suggest_outfit
+
+  Nothing matched in size XXS, so FitFindr searched once more without the size filter.
+
+  No listings matched that request. Try changing the description, size, or maximum price.
+
+0 model calls this session
 ```
 
-The retry preserved the description and price ceiling, removed only `size`,
-and still stopped safely when the second search was empty.
+The retry kept the description and price ceiling, removed only `size`, and
+still stopped safely when the second search was empty. At first the trace was
+the only place that recorded the dropped constraint. I then added
+`session["dropped_constraint"]` in `agent.py::run_agent`, and `app.py` now
+prints it, so the user is told which filter was removed.
+
+**Stretch run log**
+
+The retry was added after the before and after runs, so neither of those logs
+shows it. I ran a separate evaluation to measure it, with
+`python run_eval.py --label retry` (`results/run_2026-10-07_2213_retry.md`).
+It is evidence for this stretch only. It is not a third measurement of the
+improvement. I added one diagnostic scenario to `scenarios.py`,
+`denim jacket size XXL under $50`. No denim jacket is listed in XXL, but seven
+matches exist once the size is dropped, so this query shows the retry actually
+finding something. I also added a `dropped_constraint` line to each try in
+the `run_eval.py` report.
+
+A try passes if the trace shows `search_listings retry (MCP call)`, the log
+records the dropped constraint, and the loop then takes the correct path:
+continue to a fit card if the retry found listings, or stop before
+`suggest_outfit` if it didn't.
+
+| Scenario | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
+|---|---|---|---|---|---|---|---|
+| Retry finds results (`denim jacket size XXL under $50`) | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| Retry still empty (`designer ballgown size XXS under $5`, Criterion 2's query) | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+
+In all five denim tries, the log recorded `dropped_constraint: size XXL`, the
+retry returned 7 listings, and the run went on to select
+`Denim Jacket — Light Wash, Cropped` (`lst_007`) and produce a fit card. In all
+five ballgown tries, the log recorded `dropped_constraint: size XXS`, the retry
+returned nothing, and the loop stopped before `suggest_outfit`. So Criterion 2
+still holds with the retry in place, with one extra search step. In the same
+run, criteria 1, 3, 4, and 5 also passed 5 of 5, so the retry didn't break
+anything.
+
+Real output from Try 1 of the denim scenario, from
+`results/run_2026-10-07_2213_retry.md`, produced by `run_eval.py::run_once`
+calling `agent.py::run_agent`:
+
+```
+- stopped early: no
+- selected_item: Denim Jacket — Light Wash, Cropped ($42.0, poshmark)
+- search_results: 7
+- dropped_constraint: size XXL
+
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: [] (empty)
+[2] search_listings retry (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: 7 items: Denim Jacket — Light Wash, Cropped, Vintage Levi's 501 Jeans — Medium Wash, 90s Track Jacket — Navy/White Stripe … +4 more
+      →    empty search: dropped size constraint once
+[3] compare_prices
+      in:  dict with keys: selected_item, search_results
+      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
+[4] wardrobe branch
+      in:  dict with keys: saved_item_count
+      out: saved wardrobe
+      →    branch: saved wardrobe
+[5] suggest_outfit
+      in:  dict with keys: new_item, wardrobe
+      out: Here is a practical, stylish outfit using your new thrifted item:  **Outfit: Streetwear Denim-on-Denim** *   *…
+[6] create_fit_card
+      in:  dict with keys: outfit, new_item
+      out: Nothing beats the retro-cool streetwear energy of throwing on a Denim Jacket — Light Wash, Cropped over a cris…
+```
 
 ---
 
@@ -545,6 +621,25 @@ Fit card:
 Scored this butterfly print Y2K baby tee on Depop for just $18, and I am obsessed. It gives off the ultimate soft-meets-grunge vibe whether you style it with baggy denim or wide-leg trousers. FitFindr makes curating these nostalgic looks way too easy!
 ```
 
+**Criterion 2, Try 1** (query `designer ballgown size XXS under $5`). This came
+from the same file, produced by `run_eval.py::run_once` calling
+`agent.py::run_agent`; the stop message and the trace come from the search
+branch in `run_agent`:
+
+```
+- stopped early: yes — No listings matched that request. Try changing the description, size, or maximum price.
+- selected_item: (none)
+- search_results: 0
+- suggest_outfit_new_item_id: (not called)
+
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: [] (empty)
+[2] search branch
+      out: No listings matched that request. Try changing the description, size, or maximum price.
+      →    empty results: stopping before suggest_outfit
+```
+
 ---
 
 ## Verdicts and Diagnoses
@@ -567,11 +662,11 @@ Scored this butterfly print Y2K baby tee on Depop for just $18, and I am obsesse
 
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
-| 1 | 4 of 5 | MET (5/5) | All five matching-query tries reached `create_fit_card` and returned a non-empty card. |
-| 2 | 5 of 5 | MET (5/5) | Every impossible query returned the requested message and stopped after the empty MCP search. |
-| 3 | 5 of 5 | MET (5/5) | All five tries recorded `state_handoff_exact_equal: True`; the selected ID and outfit-input ID were both `lst_002`. |
-| 4 | 4 of 5 | MET (5/5) | Every card was 2–4 sentences and included a title word, `$18`, and `Depop` (case-insensitive). |
-| 5 | 5 of 5 | MET (5/5) | Every returned price in all five tries was at most the parsed `$30` ceiling. |
+| 1 | Full three-tool run returns a fit card | 4 of 5 | MET (5/5) | All five matching-query tries reached `create_fit_card` and returned a non-empty card. |
+| 2 | Empty search stops before tool 2 | 5 of 5 | MET (5/5) | Every impossible query returned the requested message and stopped after the empty MCP search. |
+| 3 | Item in session matches item passed on | 5 of 5 | MET (5/5) | All five tries recorded `state_handoff_exact_equal: True`; the selected ID and outfit-input ID were both `lst_002`. |
+| 4 | Fit card mentions the item's details | 4 of 5 | MET (5/5) | Every card was 2–4 sentences and included a title word, `$18`, and `Depop` (case-insensitive). |
+| 5 | Over-budget query returns nothing over the limit | 5 of 5 | MET (5/5) | Every returned price in all five tries was at most the parsed `$30` ceiling. |
 
 **Diagnoses**
 
@@ -581,6 +676,15 @@ conservative: the matching run passed 5 of 5 times. A tighter, still
 checkable target for a future run would be 5 of 5 matching queries completing
 all three tools. I am leaving the original criterion unchanged because this
 is a target-tightening observation, not a revision of a broken criterion.
+
+Criterion 4 was set too low in two ways. Its 4-of-5 target passed 5 of 5,
+and "a word from the listing's `title`" is easy to satisfy: a generic word
+like "tee" counts. Not one of the five baseline cards used the actual listing
+title (`Y2K Baby Tee — Butterfly Print`). Each one paraphrased it as "butterfly
+baby tee." The cause is the prompt in `tools.py::create_fit_card`. It never
+asked for the title, so the model was free to rename the item. A tighter target
+would be: **in 5 of 5 tries, the fit card contains the exact listing title.**
+This weakness is what my improvement targets.
 
 
 
@@ -621,6 +725,10 @@ is a target-tightening observation, not a revision of a broken criterion.
 
 **Empty search**
 
+*This trace was captured before the retry stretch was added. The same query
+now retries once without the size filter before stopping; see Stretch run
+evidence in the Unit 4 Stretch Plan.*
+
 ```
 [1] search_listings (MCP call)
       in:  dict with keys: description, size, max_price
@@ -660,9 +768,11 @@ strengthens the behavior behind Criterion 4.
 
 **Which failure it was meant to fix:**
 
-There was no failing criterion to repair. The baseline target allowed a card
-to mention only one title word, so this improvement addresses that weaker
-observable target directly without revising the original criterion.
+There was no failing criterion to repair. The diagnosis above found that
+Criterion 4's target was too loose: the prompt never asked for the listing
+title, and 0 of 5 baseline cards used it. This change aims at the tighter
+target named there ("exact listing title in 5 of 5 cards"). The original
+criterion stays as written.
 
 ### Run Log — After
 
@@ -676,12 +786,25 @@ observable target directly without revising the original criterion.
 
 **Did it help, and how do I know:**
 
-Yes. The original criteria still passed 5 of 5 in both runs, so the change did
-not alter the existing verdicts. The stricter behavior was measured in
-`results/run_2026-10-07_1903_after.md`: all five Criterion 4 fit cards included
-the exact phrase `Y2K Baby Tee — Butterfly Print`, while the baseline only
-needed and was checked for a title word. The after run had no model-service
-errors, so this comparison is usable.
+Yes, for the target it was aimed at. The original five criteria passed 5 of 5
+in both runs, so the verdicts didn't change. I measured the tighter target by
+searching both logs for the exact title `Y2K Baby Tee — Butterfly Print`:
+
+| Measure (Criterion 4 scenario) | Before | After |
+|---|---|---|
+| Card contains the exact listing title | 0 of 5 | 5 of 5 |
+| Card is 2–4 sentences, has `$18` and Depop | 5 of 5 | 5 of 5 |
+
+The same held across every Y2K-tee scenario (criteria 1, 3, 4, 5): 0 of 20
+cards used the exact title before and 20 of 20 after. Neither run had
+model-service errors, so the comparison is usable.
+
+**A side effect, reported honestly:** the cards became more alike. In the
+before log, no card or outfit text contains "Channeling." In the after log it
+appears 26 times, and all 5 Criterion 4 cards open with "Channel…" or
+"Channeling…". My guess is that forcing a fixed, awkward title into the
+caption pushed the model toward one safe opening. So the change made the card
+more accurate, and slightly worse as something a person would want to post.
 
 <!-- If it made things worse, say that. Honestly reported, that earns full
      credit and is more interesting than one that worked. -->
@@ -692,10 +815,28 @@ errors, so this comparison is usable.
 
 ## What's Still Broken
 
-No required criterion remains missed. The optional retry-with-looser-
-constraints stretch is implemented and measured in the stretch run evidence
-above. The required before/after test, diagnoses, trace, improvement, and one
-stretch feature are complete.
+No required criterion remains missed, but the tests are weaker than the 5/5
+scores make them look:
+
+- **The scenarios barely vary.** Criteria 1, 3, 4, and 5 all run a Y2K-tee
+  query, so every try selects the same listing (`lst_002`). Criterion 5's search
+  is deterministic, which means its five tries are identical by design. I'd
+  rewrite these to cover five different items and price ceilings. I stopped
+  because the criteria were already committed with these scenarios. Changing
+  them now would be a second change to the system.
+- **The agent always picks the first search result.** Keyword ranking isn't a
+  quality check. For `graphic tee` under $30, it put `Mesh Long-Sleeve Top`
+  (which isn't a graphic tee) ahead of `Vintage Band Tee — Faded Grey`. Nothing
+  checks that the top result is actually the best one.
+- **The fit cards sound alike after the improvement.** Many open with
+  "Channeling…" (see above). The next prompt change would ask for a varied
+  opening, measured the same way as the first improvement.
+- **The retry can hand back the wrong size.** For `denim jacket size XXL`, it
+  selects a size S jacket. The CLI now says the size filter was dropped, but
+  the outfit suggestion and fit card never mention that the item may not fit.
+  A fix would pass `dropped_constraint` into `suggest_outfit` so it can flag
+  the mismatch. I stopped there because the stretch only asks for the retry and
+  a note on what it dropped.
 
 
 

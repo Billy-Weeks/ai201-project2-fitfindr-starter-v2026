@@ -39,6 +39,7 @@ def new_session(query: str, wardrobe: dict) -> dict:
     return {
         "price_comparison": None,
         "wardrobe_path": None,
+        "dropped_constraint": None,  # set when an empty search was retried looser
         "query": query,              # what the user typed
         "parsed": {},                # description / size / max_price you pulled out of it
         "search_results": [],        # everything search_listings returned
@@ -77,6 +78,7 @@ def run_agent(query: str, wardrobe: dict) -> dict:
                     }
                     results = call_tool("search_listings", retry_inputs)
                     session["search_results"] = results
+                    session["dropped_constraint"] = f"size {parsed['size']}"
                     trace.step(
                         "search_listings retry (MCP call)",
                         inputs=retry_inputs,

@@ -114,6 +114,12 @@ def _ask_one(query, wardrobe, use_trace):
     session = run_agent(query, wardrobe)
 
     print()
+    if session.get("dropped_constraint"):
+        print(
+            f"  Nothing matched in {session['dropped_constraint']}, so FitFindr "
+            "searched once more without the size filter."
+        )
+        print()
     if session["error"]:
         print(f"  {session['error']}")
     else:
