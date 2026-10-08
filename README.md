@@ -203,7 +203,7 @@ model variability.
 
 ---
 
-+## Milestone 2 — Failure Modes and Loop Trace
+## Milestone 2 — Failure Modes and Loop Trace
 
 I triggered the three failure modes intentionally. The empty-search case made
 zero model calls because the loop stopped after the MCP search returned no
@@ -215,9 +215,9 @@ I restored the original key afterward.
 
 **Empty search**
 
-Command: \`python app.py ask 'unobtainium moonstone size XXS under $5' --trace\`
+Command: `python app.py ask 'unobtainium moonstone size XXS under $5' --trace`
 
-\`\`\`
+```
 [1] search_listings (MCP call)
       in:  dict with keys: description, size, max_price
       out: [] (empty)
@@ -228,13 +228,13 @@ Command: \`python app.py ask 'unobtainium moonstone size XXS under $5' --trace\`
 No listings matched that request. Try changing the description, size, or maximum price.
 
 0 model calls this session
-\`\`\`
+```
 
 **Empty wardrobe**
 
-Command: \`python app.py ask 'vintage graphic tee under $30' --empty-wardrobe --trace\`
+Command: `python app.py ask 'vintage graphic tee under $30' --empty-wardrobe --trace`
 
-\`\`\`
+```
 [1] search_listings (MCP call)
       in:  dict with keys: description, size, max_price
       out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
@@ -253,13 +253,13 @@ Command: \`python app.py ask 'vintage graphic tee under $30' --empty-wardrobe --
       out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's giving major nostalgic streetwear …
 
 0 model calls this session, 2 served from cache
-\`\`\`
+```
 
 **Model unavailable**
 
-Command: \`python app.py ask 'emerald velvet blazer for a statement evening outfit under $60' --trace\`
+Command: `python app.py ask 'emerald velvet blazer for a statement evening outfit under $60' --trace`
 
-\`\`\`
+```
 [1] search_listings (MCP call)
       in:  dict with keys: description, size, max_price
       out: 2 items: Velvet Blazer — Emerald Green, Vintage Linen Blazer — Cream
@@ -274,7 +274,7 @@ Command: \`python app.py ask 'emerald velvet blazer for a statement evening outf
 The model was unavailable, so FitFindr stopped: The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com.
 
 1 model calls this session
-\`\`\`
+```
 
 The failure messages tell the user what happened and, for the empty search,
 what to change. The model-unavailable message identifies the key as the next
@@ -282,9 +282,9 @@ thing to check instead of exposing a raw stack trace.
 
 **Full normal loop trace**
 
-Command: \`python app.py ask 'vintage graphic tee under $30' --trace\`
+Command: `python app.py ask 'vintage graphic tee under $30' --trace`
 
-\`\`\`
+```
 [1] search_listings (MCP call)
       in:  dict with keys: description, size, max_price
       out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
@@ -303,11 +303,11 @@ Command: \`python app.py ask 'vintage graphic tee under $30' --trace\`
       out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's already my new favorite find. I pa…
 
 Found: Y2K Baby Tee — Butterfly Print — $18.0 on depop
-\`\`\`
+```
 
 The trace shows the tool calls in order, including the MCP call, and the empty
-search trace is shorter because the loop stops before \`compare_prices\`,
-\`suggest_outfit\`, and \`create_fit_card\`.
+search trace is shorter because the loop stops before `compare_prices`,
+`suggest_outfit`, and `create_fit_card`.
 
 ---
 
@@ -469,15 +469,15 @@ $ python app.py ask 'vintage graphic tee under $30' --empty-wardrobe --trace
 
 **Moment 1**
 
-- *What I asked for:* I asked Codex, why `create_fit_card` returned the exact same caption three times even though `TEMPERATURE` was set to `0.9`.
-- *What came back:* The response explained that `CACHE_ENABLED` was reusing the cached answer before the temperature setting could create variation.
-- *What I changed:* I reran the test with `AI201_CACHE=0`, confirmed that the three captions varied, and added the comparison to the `Sample Run` section of `README.md`.
+- *What I asked for:* I asked Codex to check whether the evaluation report actually measured all five acceptance criteria well enough for the rubric.
+- *What came back:* It found that the original `run_eval.py` report showed only the selected item and result count, so it did not directly prove the exact state handoff for criterion 3 or every returned price for criterion 5.
+- *What I changed:* I updated `run_eval.py` to record the selected-item ID, the item received by `suggest_outfit`, exact equality of those dictionaries, the parsed price ceiling, every returned price, and whether each price was within the ceiling.
 
 **Moment 2**
 
-- *What I asked for:* I asked Codex for help with implementing the string parsing logic in `run_agent` that followed the method that was laid out previously in milestone 2
-- *What came back:* It returned a complicated parse which included regex which was not part of the way I indicated the string would be parsed.
-- *What I changed:* I went through the logic and adjusted it to exclude regex and only include simple string parsing.
+- *What I asked for:* I asked Codex for a measured improvement even though the baseline missed none of the five criteria.
+- *What came back:* The review found that the fit-card criterion only required one word from the listing title, so the prompt could be made more specific without changing the original criterion.
+- *What I changed:* I changed `tools.py::create_fit_card` to ask for the exact listing title phrase while retaining the requirements for a two-to-four-sentence caption, price, platform, and outfit vibe.
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
@@ -582,19 +582,44 @@ is a target-tightening observation, not a revision of a broken criterion.
 **Happy path**
 
 ```
-
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[2] compare_prices
+      in:  dict with keys: selected_item, search_results
+      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
+[3] wardrobe branch
+      in:  dict with keys: saved_item_count
+      out: saved wardrobe
+      →    branch: saved wardrobe
+[4] suggest_outfit
+      in:  dict with keys: new_item, wardrobe
+      out: Here are two practical outfits combining your new thrifted Y2K baby tee with pieces from your wardrobe:  **Out…
+[5] create_fit_card
+      in:  dict with keys: outfit, new_item
+      out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's already my new favorite find. I pa…
 ```
 
 **Empty search**
 
 ```
-
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: [] (empty)
+[2] search branch
+      out: No listings matched that request. Try changing the description, size, or maximum price.
+      →    empty results: stopping before suggest_outfit
 ```
 
 **On the MCP move:** <!-- what changed in your code, and whether anything
 behaved differently afterwards. If the rewire didn't work, say exactly where it
 broke — the error text and the last thing that worked. That earns the point in
 full. -->
+
+`mcp_server.py` registers `search_listings`, and `agent.py::run_agent` calls it
+through `mcp_client.call_tool`. The MCP result had the same listing shape as
+the direct tool result, and the normal query still completed all downstream
+steps. The trace above shows the MCP call in position 1.
 
 
 
@@ -609,19 +634,35 @@ full. -->
 
 **What I changed:**
 
+I changed `tools.py::create_fit_card` so its prompt asks for the exact listing
+title phrase, rather than only requiring a word from the title. The baseline
+had no misses, but this makes the fit-card requirement more specific and
+strengthens the behavior behind Criterion 4.
+
 **Which failure it was meant to fix:**
+
+There was no failing criterion to repair. The baseline target allowed a card
+to mention only one title word, so this improvement addresses that weaker
+observable target directly without revising the original criterion.
 
 ### Run Log — After
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. Full three-tool run returns a fit card | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. Empty search stops before tool 2 | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. Item in session matches item passed on | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Fit card mentions the item's details | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. Over-budget query returns nothing over the limit | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
 **Did it help, and how do I know:**
+
+Yes. The original criteria still passed 5 of 5 in both runs, so the change did
+not alter the existing verdicts. The stricter behavior was measured in
+`results/run_2026-10-07_1903_after.md`: all five Criterion 4 fit cards included
+the exact phrase `Y2K Baby Tee — Butterfly Print`, while the baseline only
+needed and was checked for a title word. The after run had no model-service
+errors, so this comparison is usable.
 
 <!-- If it made things worse, say that. Honestly reported, that earns full
      credit and is more interesting than one that worked. -->
@@ -632,9 +673,10 @@ full. -->
 
 ## What's Still Broken
 
-<!-- For each criterion still missed: what you'd do, and why you stopped where
-     you did. "I ran out of time" is fine if it's true. Pretending nothing is
-     left is not. -->
+No required criterion remains missed. The optional retry-with-looser-
+constraints stretch is declared in the README but has not been implemented or
+measured yet. If I stop here, that is the remaining optional work; the required
+before/after test, diagnoses, trace, and improvement are complete.
 
 
 
