@@ -499,17 +499,31 @@ $ python app.py ask 'vintage graphic tee under $30' --empty-wardrobe --trace
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. Full three-tool run returns a fit card | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. Empty search stops before tool 2 | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. Item in session matches item passed on | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Fit card mentions the item's details | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. Over-budget query returns nothing over the limit | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
-**Real output from one try**, pasted as text, naming the file and function
-that produced it:
+**Real output from one try**, pasted as text. This excerpt came from
+`results/run_2026-10-07_1813_before.md`, produced by
+`run_eval.py::run_once` calling `agent.py::run_agent`; the fit card text came
+from `tools.py::create_fit_card`:
 
 ```
+**Try 1**
+- stopped early: no
+- selected_item: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+- search_results: 10
+- selected_item_id: lst_002
+- suggest_outfit_new_item_id: lst_002
+- state_handoff_exact_equal: True
+- max_price: 30.0
+- returned_prices: [18.0, 24.0, 19.0, 26.0, 15.0, 22.0, 27.0, 20.0, 30.0, 12.0]
+- all_returned_prices_within_max: True
 
+Fit card:
+Scored this butterfly print Y2K baby tee on Depop for just $18, and I am obsessed. It gives off the ultimate soft-meets-grunge vibe whether you style it with baggy denim or wide-leg trousers. FitFindr makes curating these nostalgic looks way too easy!
 ```
 
 ---
@@ -534,13 +548,20 @@ that produced it:
 
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
-| 1 |  |  |  |  |
-| 2 |  |  |  |  |
-| 3 |  |  |  |  |
-| 4 |  |  |  |  |
-| 5 |  |  |  |  |
+| 1 | 4 of 5 | MET (5/5) | All five matching-query tries reached `create_fit_card` and returned a non-empty card. |
+| 2 | 5 of 5 | MET (5/5) | Every impossible query returned the requested message and stopped after the empty MCP search. |
+| 3 | 5 of 5 | MET (5/5) | All five tries recorded `state_handoff_exact_equal: True`; the selected ID and outfit-input ID were both `lst_002`. |
+| 4 | 4 of 5 | MET (5/5) | Every card was 2–4 sentences and included a title word, `$18`, and `Depop` (case-insensitive). |
+| 5 | 5 of 5 | MET (5/5) | Every returned price in all five tries was at most the parsed `$30` ceiling. |
 
 **Diagnoses**
+
+There were no misses in this baseline, so there is no failing mechanism to
+diagnose. The results do show that Criterion 1's 4-of-5 target was
+conservative: the matching run passed 5 of 5 times. A tighter, still
+checkable target for a future run would be 5 of 5 matching queries completing
+all three tools. I am leaving the original criterion unchanged because this
+is a target-tightening observation, not a revision of a broken criterion.
 
 
 
