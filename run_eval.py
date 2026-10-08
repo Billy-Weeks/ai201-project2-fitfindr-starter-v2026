@@ -29,6 +29,7 @@ mode — caching is what usually explains it.
 """
 
 import argparse
+import copy
 import datetime as dt
 import sys
 import traceback
@@ -39,7 +40,7 @@ import scenarios as scenario_module
 
 def run_once(scenario, use_trace=True):
     """One scenario, one try. Returns everything worth recording."""
-    from agent import run_agent
+    import agent as agent_module
     from utils.data_loader import get_example_wardrobe, get_empty_wardrobe
     import trace as trace_module
 
@@ -50,12 +51,28 @@ def run_once(scenario, use_trace=True):
     if use_trace:
         trace_module.start_trace()
 
-    record = {"error": None, "session": None, "trace": "", "crashed": None}
+    run_agent = agent_module.run_agent
+    record = {
+        "error": None,
+        "session": None,
+        "trace": "",
+        "crashed": None,
+        "outfit_input_item": None,
+    }
+    original_suggest_outfit = agent_module.suggest_outfit
+
+    def record_outfit_input(new_item, wardrobe):
+        record["outfit_input_item"] = copy.deepcopy(new_item)
+        return original_suggest_outfit(new_item, wardrobe)
+
+    agent_module.suggest_outfit = record_outfit_input
     try:
         record["session"] = run_agent(scenario["query"], wardrobe)
     except Exception as exc:  # noqa: BLE001 — a crash is a result worth logging
         record["crashed"] = f"{type(exc).__name__}: {exc}"
         record["traceback"] = traceback.format_exc()
+    finally:
+        agent_module.suggest_outfit = original_suggest_outfit
 
     if use_trace:
         record["trace"] = trace_module.get_trace()
@@ -191,6 +208,32 @@ def write_report(rows, args):
                 f"- selected_item: {item.get('title', '(none)')}"
                 + (f" (${item.get('price')}, {item.get('platform')})" if item else ""),
                 f"- search_results: {len(session.get('search_results') or [])}",
+                "",
+            ]
+            outfit_item = record.get("outfit_input_item") or {}
+            selected_id = item.get("id")
+            outfit_id = outfit_item.get("id")
+            lines += [
+                f"- selected_item_id: {selected_id or '(none)'}",
+                f"- suggest_outfit_new_item_id: {outfit_id or '(not called)'}",
+                f"- state_handoff_exact_equal: {item == outfit_item if outfit_item else 'not measured'}",
+            ]
+            parsed = session.get("parsed") or {}
+            max_price = parsed.get("max_price")
+            prices = [
+                listing.get("price")
+                for listing in (session.get("search_results") or [])
+                if isinstance(listing.get("price"), (int, float))
+            ]
+            within_ceiling = (
+                "not applicable"
+                if max_price is None
+                else all(price <= max_price for price in prices)
+            )
+            lines += [
+                f"- max_price: {max_price}",
+                f"- returned_prices: {prices}",
+                f"- all_returned_prices_within_max: {within_ceiling}",
                 "",
             ]
             if session.get("outfit_suggestion"):
