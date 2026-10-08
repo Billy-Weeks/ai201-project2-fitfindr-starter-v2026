@@ -69,6 +69,20 @@ def run_agent(query: str, wardrobe: dict) -> dict:
                 results = call_tool("search_listings", parsed)
                 session["search_results"] = results
                 trace.step("search_listings (MCP call)", inputs=parsed, returned=results)
+                if not results and parsed["size"] is not None:
+                    retry_inputs = {
+                        "description": parsed["description"],
+                        "size": None,
+                        "max_price": parsed["max_price"],
+                    }
+                    results = call_tool("search_listings", retry_inputs)
+                    session["search_results"] = results
+                    trace.step(
+                        "search_listings retry (MCP call)",
+                        inputs=retry_inputs,
+                        returned=results,
+                        note="empty search: dropped size constraint once",
+                    )
                 if not results:
                     session["error"] = (
                         "No listings matched that request. Try changing the "
