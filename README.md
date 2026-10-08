@@ -145,277 +145,6 @@ The original query is stored in `session["query"]`. The parsed description, size
 
 ---
 
-## Milestone 1 — MCP Tool Move
-
-I moved `search_listings` from a direct function call into `mcp_server.py`.
-The tool is registered with typed inputs for `description`, optional `size`,
-and optional `max_price`. `agent.py::run_agent` now calls it through
-`mcp_client.call_tool`; the returned listing shape and the rest of the loop
-remain unchanged.
-
-The MCP client reported the registered tool:
-
-```
-$ python mcp_client.py
-Asking mcp_server.py what it offers…
-
-  search_listings
-    Search listings by description, optional size, and inclusive dollar ceiling.
-
-    Returns matching listing dictionaries ordered by relevance, or an empty
-    list when no listing satisfies all supplied constraints.
-
-    - description: string
-    - size: string  (optional)
-    - max_price: number  (optional)
-```
-
-The end-to-end query then showed the MCP call as the first loop step and still
-completed the remaining tools:
-
-```
-$ python app.py ask 'vintage graphic tee under $30'
-[1] search_listings (MCP call)
-      in:  dict with keys: description, size, max_price
-      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
-[2] compare_prices
-      in:  dict with keys: selected_item, search_results
-      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
-[3] wardrobe branch
-      in:  dict with keys: saved_item_count
-      out: saved wardrobe
-      →    branch: saved wardrobe
-[4] suggest_outfit
-      in:  dict with keys: new_item, wardrobe
-      out: Here are two practical outfits combining your new thrifted Y2K baby tee with pieces from your wardrobe:  **Out…
-[5] create_fit_card
-      in:  dict with keys: outfit, new_item
-      out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's already my new favorite find. I pa…
-
-  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
-```
-
-The normal query behaved the same after the MCP move: it still reached
-`compare_prices`, `suggest_outfit`, and `create_fit_card`, and returned a fit
-card. The terminal reported that this particular run used cached model
-responses, so the output confirms the MCP rewire and end-to-end behavior, not
-model variability.
-
----
-
-## Milestone 2 — Failure Modes and Loop Trace
-
-I triggered the three failure modes intentionally. The empty-search case made
-zero model calls because the loop stopped after the MCP search returned no
-listings. The empty-wardrobe case used two cached model responses, but it still
-took the empty-wardrobe branch and returned both an outfit suggestion and a fit
-card. For the unavailable-model test, I changed one character of the API key
-and used a new query; it made one real model call and returned a readable error.
-I restored the original key afterward.
-
-**Empty search**
-
-*This output was captured before the retry stretch was added. The same query
-now retries once without the size filter before stopping; see Stretch run
-evidence below.*
-
-Command: `python app.py ask 'unobtainium moonstone size XXS under $5' --trace`
-
-```
-[1] search_listings (MCP call)
-      in:  dict with keys: description, size, max_price
-      out: [] (empty)
-[2] search branch
-      out: No listings matched that request. Try changing the description, size, or maximum price.
-      →    empty results: stopping before suggest_outfit
-
-No listings matched that request. Try changing the description, size, or maximum price.
-
-0 model calls this session
-```
-
-**Empty wardrobe**
-
-Command: `python app.py ask 'vintage graphic tee under $30' --empty-wardrobe --trace`
-
-```
-[1] search_listings (MCP call)
-      in:  dict with keys: description, size, max_price
-      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
-[2] compare_prices
-      in:  dict with keys: selected_item, search_results
-      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
-[3] wardrobe branch
-      in:  dict with keys: saved_item_count
-      out: general styling
-      →    branch: empty wardrobe, general styling
-[4] suggest_outfit
-      in:  dict with keys: new_item, wardrobe
-      out: Here are two versatile ways to style your Y2K butterfly baby tee:  ### 1. Casual Y2K Streetwear * **The Pieces…
-[5] create_fit_card
-      in:  dict with keys: outfit, new_item
-      out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's giving major nostalgic streetwear …
-
-0 model calls this session, 2 served from cache
-```
-
-**Model unavailable**
-
-Command: `python app.py ask 'emerald velvet blazer for a statement evening outfit under $60' --trace`
-
-```
-[1] search_listings (MCP call)
-      in:  dict with keys: description, size, max_price
-      out: 2 items: Velvet Blazer — Emerald Green, Vintage Linen Blazer — Cream
-[2] compare_prices
-      in:  dict with keys: selected_item, search_results
-      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
-[3] wardrobe branch
-      in:  dict with keys: saved_item_count
-      out: saved wardrobe
-      →    branch: saved wardrobe
-
-The model was unavailable, so FitFindr stopped: The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com.
-
-1 model calls this session
-```
-
-The failure messages tell the user what happened and, for the empty search,
-what to change. The model-unavailable message identifies the key as the next
-thing to check instead of exposing a raw stack trace.
-
-**Full normal loop trace**
-
-Command: `python app.py ask 'vintage graphic tee under $30' --trace`
-
-```
-[1] search_listings (MCP call)
-      in:  dict with keys: description, size, max_price
-      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
-[2] compare_prices
-      in:  dict with keys: selected_item, search_results
-      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
-[3] wardrobe branch
-      in:  dict with keys: saved_item_count
-      out: saved wardrobe
-      →    branch: saved wardrobe
-[4] suggest_outfit
-      in:  dict with keys: new_item, wardrobe
-      out: Here are two practical outfits combining your new thrifted Y2K baby tee with pieces from your wardrobe:  **Out…
-[5] create_fit_card
-      in:  dict with keys: outfit, new_item
-      out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's already my new favorite find. I pa…
-
-Found: Y2K Baby Tee — Butterfly Print — $18.0 on depop
-```
-
-The trace shows the tool calls in order, including the MCP call, and the empty
-search trace is shorter because the loop stops before `compare_prices`,
-`suggest_outfit`, and `create_fit_card`.
-
----
-
-## Unit 4 Stretch Plan
-
-Before implementing it, I declared the optional **retry with looser
-constraints** stretch. When a search with a requested size returns no listings,
-the agent retries once without the size filter and records that dropped
-constraint in the trace.
-
-**Stretch run evidence**
-
-Command: `python app.py ask 'unobtainium moonstone size XXS under $5' --trace`
-
-```
-[1] search_listings (MCP call)
-      in:  dict with keys: description, size, max_price
-      out: [] (empty)
-[2] search_listings retry (MCP call)
-      in:  dict with keys: description, size, max_price
-      out: [] (empty)
-      →    empty search: dropped size constraint once
-[3] search branch
-      out: No listings matched that request. Try changing the description, size, or maximum price.
-      →    empty results: stopping before suggest_outfit
-
-  Nothing matched in size XXS, so FitFindr searched once more without the size filter.
-
-  No listings matched that request. Try changing the description, size, or maximum price.
-
-0 model calls this session
-```
-
-The retry kept the description and price ceiling, removed only `size`, and
-still stopped safely when the second search was empty. At first the trace was
-the only place that recorded the dropped constraint. I then added
-`session["dropped_constraint"]` in `agent.py::run_agent`, and `app.py` now
-prints it, so the user is told which filter was removed.
-
-**Stretch run log**
-
-The retry was added after the before and after runs, so neither of those logs
-shows it. I ran a separate evaluation to measure it, with
-`python run_eval.py --label retry` (`results/run_2026-10-07_2213_retry.md`).
-It is evidence for this stretch only. It is not a third measurement of the
-improvement. I added one diagnostic scenario to `scenarios.py`,
-`denim jacket size XXL under $50`. No denim jacket is listed in XXL, but seven
-matches exist once the size is dropped, so this query shows the retry actually
-finding something. I also added a `dropped_constraint` line to each try in
-the `run_eval.py` report.
-
-A try passes if the trace shows `search_listings retry (MCP call)`, the log
-records the dropped constraint, and the loop then takes the correct path:
-continue to a fit card if the retry found listings, or stop before
-`suggest_outfit` if it didn't.
-
-| Scenario | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
-|---|---|---|---|---|---|---|---|
-| Retry finds results (`denim jacket size XXL under $50`) | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
-| Retry still empty (`designer ballgown size XXS under $5`, Criterion 2's query) | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
-
-In all five denim tries, the log recorded `dropped_constraint: size XXL`, the
-retry returned 7 listings, and the run went on to select
-`Denim Jacket — Light Wash, Cropped` (`lst_007`) and produce a fit card. In all
-five ballgown tries, the log recorded `dropped_constraint: size XXS`, the retry
-returned nothing, and the loop stopped before `suggest_outfit`. So Criterion 2
-still holds with the retry in place, with one extra search step. In the same
-run, criteria 1, 3, 4, and 5 also passed 5 of 5, so the retry didn't break
-anything.
-
-Real output from Try 1 of the denim scenario, from
-`results/run_2026-10-07_2213_retry.md`, produced by `run_eval.py::run_once`
-calling `agent.py::run_agent`:
-
-```
-- stopped early: no
-- selected_item: Denim Jacket — Light Wash, Cropped ($42.0, poshmark)
-- search_results: 7
-- dropped_constraint: size XXL
-
-[1] search_listings (MCP call)
-      in:  dict with keys: description, size, max_price
-      out: [] (empty)
-[2] search_listings retry (MCP call)
-      in:  dict with keys: description, size, max_price
-      out: 7 items: Denim Jacket — Light Wash, Cropped, Vintage Levi's 501 Jeans — Medium Wash, 90s Track Jacket — Navy/White Stripe … +4 more
-      →    empty search: dropped size constraint once
-[3] compare_prices
-      in:  dict with keys: selected_item, search_results
-      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
-[4] wardrobe branch
-      in:  dict with keys: saved_item_count
-      out: saved wardrobe
-      →    branch: saved wardrobe
-[5] suggest_outfit
-      in:  dict with keys: new_item, wardrobe
-      out: Here is a practical, stylish outfit using your new thrifted item:  **Outfit: Streetwear Denim-on-Denim** *   *…
-[6] create_fit_card
-      in:  dict with keys: outfit, new_item
-      out: Nothing beats the retro-cool streetwear energy of throwing on a Denim Jacket — Light Wash, Cropped over a cris…
-```
-
----
-
 ## Sample Run
 
 <!-- Two things go here.
@@ -564,20 +293,199 @@ $ python app.py ask 'vintage graphic tee under $30' --empty-wardrobe --trace
 
 **Moment 1**
 
-- *What I asked for:* I asked Codex to check whether the evaluation report actually measured all five acceptance criteria well enough for the rubric.
-- *What came back:* It found that the original `run_eval.py` report showed only the selected item and result count, so it did not directly prove the exact state handoff for criterion 3 or every returned price for criterion 5.
-- *What I changed:* I updated `run_eval.py` to record the selected-item ID, the item received by `suggest_outfit`, exact equality of those dictionaries, the parsed price ceiling, every returned price, and whether each price was within the ceiling.
+- *What I asked for:* I asked Codex, why `create_fit_card` returned the exact same caption three times even though `TEMPERATURE` was set to `0.9`.
+- *What came back:* The response explained that `CACHE_ENABLED` was reusing the cached answer before the temperature setting could create variation.
+- *What I changed:* I reran the test with `AI201_CACHE=0`, confirmed that the three captions varied, and added the comparison to the `Sample Run` section of `README.md`.
 
 **Moment 2**
 
-- *What I asked for:* I asked Codex for a measured improvement even though the baseline missed none of the five criteria.
-- *What came back:* The review found that the fit-card criterion only required one word from the listing title, so the prompt could be made more specific without changing the original criterion.
-- *What I changed:* I changed `tools.py::create_fit_card` to ask for the exact listing title phrase while retaining the requirements for a two-to-four-sentence caption, price, platform, and outfit vibe.
+- *What I asked for:* I asked Codex for help with implementing the string parsing logic in `run_agent` that followed the method that was laid out previously in milestone 2
+- *What came back:* It returned a complicated parse which included regex which was not part of the way I indicated the string would be parsed.
+- *What I changed:* I went through the logic and adjusted it to exclude regex and only include simple string parsing.
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
      Don't fill these in during unit 3.
      ═══════════════════════════════════════════════════════════════════ -->
+
+---
+
+## Unit 4 Stretch Plan
+
+Before implementing it, I declared the optional **retry with looser
+constraints** stretch. When a search with a requested size returns no listings,
+the agent retries once without the size filter and records that dropped
+constraint in the trace.
+
+---
+
+## Milestone 1 — MCP Tool Move
+
+I moved `search_listings` from a direct function call into `mcp_server.py`.
+The tool is registered with typed inputs for `description`, optional `size`,
+and optional `max_price`. `agent.py::run_agent` now calls it through
+`mcp_client.call_tool`; the returned listing shape and the rest of the loop
+remain unchanged.
+
+The MCP client reported the registered tool:
+
+```
+$ python mcp_client.py
+Asking mcp_server.py what it offers…
+
+  search_listings
+    Search listings by description, optional size, and inclusive dollar ceiling.
+
+    Returns matching listing dictionaries ordered by relevance, or an empty
+    list when no listing satisfies all supplied constraints.
+
+    - description: string
+    - size: string  (optional)
+    - max_price: number  (optional)
+```
+
+The end-to-end query then showed the MCP call as the first loop step and still
+completed the remaining tools:
+
+```
+$ python app.py ask 'vintage graphic tee under $30'
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[2] compare_prices
+      in:  dict with keys: selected_item, search_results
+      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
+[3] wardrobe branch
+      in:  dict with keys: saved_item_count
+      out: saved wardrobe
+      →    branch: saved wardrobe
+[4] suggest_outfit
+      in:  dict with keys: new_item, wardrobe
+      out: Here are two practical outfits combining your new thrifted Y2K baby tee with pieces from your wardrobe:  **Out…
+[5] create_fit_card
+      in:  dict with keys: outfit, new_item
+      out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's already my new favorite find. I pa…
+
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+```
+
+The normal query behaved the same after the MCP move: it still reached
+`compare_prices`, `suggest_outfit`, and `create_fit_card`, and returned a fit
+card. The terminal reported that this particular run used cached model
+responses, so the output confirms the MCP rewire and end-to-end behavior, not
+model variability.
+
+---
+
+## Milestone 2 — Failure Modes and Loop Trace
+
+I triggered the three failure modes intentionally. The empty-search case made
+zero model calls because the loop stopped after the MCP search returned no
+listings. The empty-wardrobe case used two cached model responses, but it still
+took the empty-wardrobe branch and returned both an outfit suggestion and a fit
+card. For the unavailable-model test, I changed one character of the API key
+and used a new query; it made one real model call and returned a readable error.
+I restored the original key afterward.
+
+**Empty search**
+
+*This output was captured before the retry stretch was added. The same query
+now retries once without the size filter before stopping; see the Stretch
+evidence section below.*
+
+Command: `python app.py ask 'unobtainium moonstone size XXS under $5' --trace`
+
+```
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: [] (empty)
+[2] search branch
+      out: No listings matched that request. Try changing the description, size, or maximum price.
+      →    empty results: stopping before suggest_outfit
+
+No listings matched that request. Try changing the description, size, or maximum price.
+
+0 model calls this session
+```
+
+**Empty wardrobe**
+
+Command: `python app.py ask 'vintage graphic tee under $30' --empty-wardrobe --trace`
+
+```
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[2] compare_prices
+      in:  dict with keys: selected_item, search_results
+      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
+[3] wardrobe branch
+      in:  dict with keys: saved_item_count
+      out: general styling
+      →    branch: empty wardrobe, general styling
+[4] suggest_outfit
+      in:  dict with keys: new_item, wardrobe
+      out: Here are two versatile ways to style your Y2K butterfly baby tee:  ### 1. Casual Y2K Streetwear * **The Pieces…
+[5] create_fit_card
+      in:  dict with keys: outfit, new_item
+      out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's giving major nostalgic streetwear …
+
+0 model calls this session, 2 served from cache
+```
+
+**Model unavailable**
+
+Command: `python app.py ask 'emerald velvet blazer for a statement evening outfit under $60' --trace`
+
+```
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: 2 items: Velvet Blazer — Emerald Green, Vintage Linen Blazer — Cream
+[2] compare_prices
+      in:  dict with keys: selected_item, search_results
+      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
+[3] wardrobe branch
+      in:  dict with keys: saved_item_count
+      out: saved wardrobe
+      →    branch: saved wardrobe
+
+The model was unavailable, so FitFindr stopped: The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com.
+
+1 model calls this session
+```
+
+The failure messages tell the user what happened and, for the empty search,
+what to change. The model-unavailable message identifies the key as the next
+thing to check instead of exposing a raw stack trace.
+
+**Full normal loop trace**
+
+Command: `python app.py ask 'vintage graphic tee under $30' --trace`
+
+```
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[2] compare_prices
+      in:  dict with keys: selected_item, search_results
+      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
+[3] wardrobe branch
+      in:  dict with keys: saved_item_count
+      out: saved wardrobe
+      →    branch: saved wardrobe
+[4] suggest_outfit
+      in:  dict with keys: new_item, wardrobe
+      out: Here are two practical outfits combining your new thrifted Y2K baby tee with pieces from your wardrobe:  **Out…
+[5] create_fit_card
+      in:  dict with keys: outfit, new_item
+      out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's already my new favorite find. I pa…
+
+Found: Y2K Baby Tee — Butterfly Print — $18.0 on depop
+```
+
+The trace shows the tool calls in order, including the MCP call, and the empty
+search trace is shorter because the loop stops before `compare_prices`,
+`suggest_outfit`, and `create_fit_card`.
 
 ---
 
@@ -686,8 +594,6 @@ asked for the title, so the model was free to rename the item. A tighter target
 would be: **in 5 of 5 tries, the fit card contains the exact listing title.**
 This weakness is what my improvement targets.
 
-
-
 ---
 
 ## Loop Trace
@@ -726,8 +632,8 @@ This weakness is what my improvement targets.
 **Empty search**
 
 *This trace was captured before the retry stretch was added. The same query
-now retries once without the size filter before stopping; see Stretch run
-evidence in the Unit 4 Stretch Plan.*
+now retries once without the size filter before stopping; see the Stretch
+evidence section below.*
 
 ```
 [1] search_listings (MCP call)
@@ -747,8 +653,6 @@ full. -->
 through `mcp_client.call_tool`. The MCP result had the same listing shape as
 the direct tool result, and the normal query still completed all downstream
 steps. The trace above shows the MCP call in position 1.
-
-
 
 ---
 
@@ -808,7 +712,103 @@ more accurate, and slightly worse as something a person would want to post.
 <!-- If it made things worse, say that. Honestly reported, that earns full
      credit and is more interesting than one that worked. -->
 
+---
 
+## Stretch: Retry With Looser Constraints — Evidence
+
+This is the evidence for the stretch declared in the Unit 4 Stretch Plan above.
+
+**Stretch run evidence**
+
+Command: `python app.py ask 'unobtainium moonstone size XXS under $5' --trace`
+
+```
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: [] (empty)
+[2] search_listings retry (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: [] (empty)
+      →    empty search: dropped size constraint once
+[3] search branch
+      out: No listings matched that request. Try changing the description, size, or maximum price.
+      →    empty results: stopping before suggest_outfit
+
+  Nothing matched in size XXS, so FitFindr searched once more without the size filter.
+
+  No listings matched that request. Try changing the description, size, or maximum price.
+
+0 model calls this session
+```
+
+The retry kept the description and price ceiling, removed only `size`, and
+still stopped safely when the second search was empty. At first the trace was
+the only place that recorded the dropped constraint. I then added
+`session["dropped_constraint"]` in `agent.py::run_agent`, and `app.py` now
+prints it, so the user is told which filter was removed.
+
+**Stretch run log**
+
+The retry was added after the before and after runs, so neither of those logs
+shows it. I ran a separate evaluation to measure it, with
+`python run_eval.py --label retry` (`results/run_2026-10-07_2213_retry.md`).
+It is evidence for this stretch only. It is not a third measurement of the
+improvement. I added one diagnostic scenario to `scenarios.py`,
+`denim jacket size XXL under $50`. No denim jacket is listed in XXL, but seven
+matches exist once the size is dropped, so this query shows the retry actually
+finding something. I also added a `dropped_constraint` line to each try in
+the `run_eval.py` report.
+
+A try passes if the trace shows `search_listings retry (MCP call)`, the log
+records the dropped constraint, and the loop then takes the correct path:
+continue to a fit card if the retry found listings, or stop before
+`suggest_outfit` if it didn't.
+
+| Scenario | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
+|---|---|---|---|---|---|---|---|
+| Retry finds results (`denim jacket size XXL under $50`) | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| Retry still empty (`designer ballgown size XXS under $5`, Criterion 2's query) | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+
+In all five denim tries, the log recorded `dropped_constraint: size XXL`, the
+retry returned 7 listings, and the run went on to select
+`Denim Jacket — Light Wash, Cropped` (`lst_007`) and produce a fit card. In all
+five ballgown tries, the log recorded `dropped_constraint: size XXS`, the retry
+returned nothing, and the loop stopped before `suggest_outfit`. So Criterion 2
+still holds with the retry in place, with one extra search step. In the same
+run, criteria 1, 3, 4, and 5 also passed 5 of 5, so the retry didn't break
+anything.
+
+Real output from Try 1 of the denim scenario, from
+`results/run_2026-10-07_2213_retry.md`, produced by `run_eval.py::run_once`
+calling `agent.py::run_agent`:
+
+```
+- stopped early: no
+- selected_item: Denim Jacket — Light Wash, Cropped ($42.0, poshmark)
+- search_results: 7
+- dropped_constraint: size XXL
+
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: [] (empty)
+[2] search_listings retry (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: 7 items: Denim Jacket — Light Wash, Cropped, Vintage Levi's 501 Jeans — Medium Wash, 90s Track Jacket — Navy/White Stripe … +4 more
+      →    empty search: dropped size constraint once
+[3] compare_prices
+      in:  dict with keys: selected_item, search_results
+      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
+[4] wardrobe branch
+      in:  dict with keys: saved_item_count
+      out: saved wardrobe
+      →    branch: saved wardrobe
+[5] suggest_outfit
+      in:  dict with keys: new_item, wardrobe
+      out: Here is a practical, stylish outfit using your new thrifted item:  **Outfit: Streetwear Denim-on-Denim** *   *…
+[6] create_fit_card
+      in:  dict with keys: outfit, new_item
+      out: Nothing beats the retro-cool streetwear energy of throwing on a Denim Jacket — Light Wash, Cropped over a cris…
+```
 
 ---
 
@@ -836,6 +836,28 @@ scores make them look:
   A fix would pass `dropped_constraint` into `suggest_outfit` so it can flag
   the mismatch. I stopped there because the stretch only asks for the retry and
   a note on what it dropped.
+
+---
+
+## How I Used AI — Unit 4
+
+**Moment 1**
+
+- *What I asked for:* I asked Codex to check whether the evaluation report actually measured all five acceptance criteria well enough for the rubric.
+- *What came back:* It found that the original `run_eval.py` report showed only the selected item and result count, so it did not directly prove the exact state handoff for criterion 3 or every returned price for criterion 5.
+- *What I changed:* I updated `run_eval.py` to record the selected-item ID, the item received by `suggest_outfit`, exact equality of those dictionaries, the parsed price ceiling, every returned price, and whether each price was within the ceiling.
+
+**Moment 2**
+
+- *What I asked for:* I asked Codex for a measured improvement even though the baseline missed none of the five criteria.
+- *What came back:* The review found that the fit-card criterion only required one word from the listing title, so the prompt could be made more specific without changing the original criterion.
+- *What I changed:* I changed `tools.py::create_fit_card` to ask for the exact listing title phrase while retaining the requirements for a two-to-four-sentence caption, price, platform, and outfit vibe.
+
+**Optional Moment 3 (found later, during a final review)**
+
+- *What I asked for:* After the required work was done, I asked Claude Code to compare the project against `instructions_part2.md` and the rubric, and to point out anything that could cost points.
+- *What came back:* It found that rows in my Verdicts table were missing the Criterion column, so the values sat under the wrong headers. It also found that my improvement targeted Criterion 4 while my Diagnoses section only named Criterion 1 as set too low, and that the retry stretch had no run log, because both logs predated it.
+- *What I changed:* I fixed the table. I added the Criterion 4 diagnosis that the improvement follows from, and measured the improvement with an exact-title count (0 of 5 before, 5 of 5 after). I added a `denim jacket size XXL under $50` diagnostic scenario and a `dropped_constraint` field, then ran `python run_eval.py --label retry` to put the retry in a run log.
 
 
 
