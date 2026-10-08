@@ -145,6 +145,64 @@ The original query is stored in `session["query"]`. The parsed description, size
 
 ---
 
+## Milestone 1 — MCP Tool Move
+
+I moved `search_listings` from a direct function call into `mcp_server.py`.
+The tool is registered with typed inputs for `description`, optional `size`,
+and optional `max_price`. `agent.py::run_agent` now calls it through
+`mcp_client.call_tool`; the returned listing shape and the rest of the loop
+remain unchanged.
+
+The MCP client reported the registered tool:
+
+```
+$ python mcp_client.py
+Asking mcp_server.py what it offers…
+
+  search_listings
+    Search listings by description, optional size, and inclusive dollar ceiling.
+
+    Returns matching listing dictionaries ordered by relevance, or an empty
+    list when no listing satisfies all supplied constraints.
+
+    - description: string
+    - size: string  (optional)
+    - max_price: number  (optional)
+```
+
+The end-to-end query then showed the MCP call as the first loop step and still
+completed the remaining tools:
+
+```
+$ python app.py ask 'vintage graphic tee under $30'
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[2] compare_prices
+      in:  dict with keys: selected_item, search_results
+      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
+[3] wardrobe branch
+      in:  dict with keys: saved_item_count
+      out: saved wardrobe
+      →    branch: saved wardrobe
+[4] suggest_outfit
+      in:  dict with keys: new_item, wardrobe
+      out: Here are two practical outfits combining your new thrifted Y2K baby tee with pieces from your wardrobe:  **Out…
+[5] create_fit_card
+      in:  dict with keys: outfit, new_item
+      out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's already my new favorite find. I pa…
+
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+```
+
+The normal query behaved the same after the MCP move: it still reached
+`compare_prices`, `suggest_outfit`, and `create_fit_card`, and returned a fit
+card. The terminal reported that this particular run used cached model
+responses, so the output confirms the MCP rewire and end-to-end behavior, not
+model variability.
+
+---
+
 ## Sample Run
 
 <!-- Two things go here.
