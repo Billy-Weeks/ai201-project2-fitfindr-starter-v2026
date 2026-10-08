@@ -203,6 +203,114 @@ model variability.
 
 ---
 
++## Milestone 2 — Failure Modes and Loop Trace
+
+I triggered the three failure modes intentionally. The empty-search case made
+zero model calls because the loop stopped after the MCP search returned no
+listings. The empty-wardrobe case used two cached model responses, but it still
+took the empty-wardrobe branch and returned both an outfit suggestion and a fit
+card. For the unavailable-model test, I changed one character of the API key
+and used a new query; it made one real model call and returned a readable error.
+I restored the original key afterward.
+
+**Empty search**
+
+Command: \`python app.py ask 'unobtainium moonstone size XXS under $5' --trace\`
+
+\`\`\`
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: [] (empty)
+[2] search branch
+      out: No listings matched that request. Try changing the description, size, or maximum price.
+      →    empty results: stopping before suggest_outfit
+
+No listings matched that request. Try changing the description, size, or maximum price.
+
+0 model calls this session
+\`\`\`
+
+**Empty wardrobe**
+
+Command: \`python app.py ask 'vintage graphic tee under $30' --empty-wardrobe --trace\`
+
+\`\`\`
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[2] compare_prices
+      in:  dict with keys: selected_item, search_results
+      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
+[3] wardrobe branch
+      in:  dict with keys: saved_item_count
+      out: general styling
+      →    branch: empty wardrobe, general styling
+[4] suggest_outfit
+      in:  dict with keys: new_item, wardrobe
+      out: Here are two versatile ways to style your Y2K butterfly baby tee:  ### 1. Casual Y2K Streetwear * **The Pieces…
+[5] create_fit_card
+      in:  dict with keys: outfit, new_item
+      out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's giving major nostalgic streetwear …
+
+0 model calls this session, 2 served from cache
+\`\`\`
+
+**Model unavailable**
+
+Command: \`python app.py ask 'emerald velvet blazer for a statement evening outfit under $60' --trace\`
+
+\`\`\`
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: 2 items: Velvet Blazer — Emerald Green, Vintage Linen Blazer — Cream
+[2] compare_prices
+      in:  dict with keys: selected_item, search_results
+      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
+[3] wardrobe branch
+      in:  dict with keys: saved_item_count
+      out: saved wardrobe
+      →    branch: saved wardrobe
+
+The model was unavailable, so FitFindr stopped: The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com.
+
+1 model calls this session
+\`\`\`
+
+The failure messages tell the user what happened and, for the empty search,
+what to change. The model-unavailable message identifies the key as the next
+thing to check instead of exposing a raw stack trace.
+
+**Full normal loop trace**
+
+Command: \`python app.py ask 'vintage graphic tee under $30' --trace\`
+
+\`\`\`
+[1] search_listings (MCP call)
+      in:  dict with keys: description, size, max_price
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[2] compare_prices
+      in:  dict with keys: selected_item, search_results
+      out: dict with keys: selected_item_id, selected_price, comparison_count, lowest_price, highest_price, average_price
+[3] wardrobe branch
+      in:  dict with keys: saved_item_count
+      out: saved wardrobe
+      →    branch: saved wardrobe
+[4] suggest_outfit
+      in:  dict with keys: new_item, wardrobe
+      out: Here are two practical outfits combining your new thrifted Y2K baby tee with pieces from your wardrobe:  **Out…
+[5] create_fit_card
+      in:  dict with keys: outfit, new_item
+      out: Scored this adorable Y2K butterfly baby tee on Depop for just $18, and it's already my new favorite find. I pa…
+
+Found: Y2K Baby Tee — Butterfly Print — $18.0 on depop
+\`\`\`
+
+The trace shows the tool calls in order, including the MCP call, and the empty
+search trace is shorter because the loop stops before \`compare_prices\`,
+\`suggest_outfit\`, and \`create_fit_card\`.
+
+---
+
 ## Sample Run
 
 <!-- Two things go here.
