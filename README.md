@@ -799,10 +799,9 @@ The same held across every Y2K-tee scenario (criteria 1, 3, 4, 5): 0 of 20
 cards used the exact title before and 20 of 20 after. Neither run had
 model-service errors, so the comparison is usable.
 
-**A side effect, reported honestly:** the cards became more alike. In the
-before log, no card or outfit text contains "Channeling." In the after log it
-appears 26 times, and all 5 Criterion 4 cards open with "Channel…" or
-"Channeling…". My guess is that forcing a fixed, awkward title into the
+**A side effect, reported honestly:** the cards became more alike. Across all
+25 fit cards in each log, 0 opened with "Channel…" or "Channeling…" before the
+change, and 13 of 25 did after, including all 5 Criterion 4 cards. My guess is that forcing a fixed, awkward title into the
 caption pushed the model toward one safe opening. So the change made the card
 more accurate, and slightly worse as something a person would want to post.
 
