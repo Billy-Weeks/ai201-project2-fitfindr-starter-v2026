@@ -283,7 +283,8 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     platform = new_item.get("platform", "the resale marketplace")
     prompt = (
         "Write a social-media-ready FitFindr caption in exactly two to four "
-        "sentences. Mention the item, its price, and its platform once, and "
+        "sentences. Use the exact listing title phrase, mention the item's "
+        "price and platform once, and "
         "describe the outfit's specific vibe. Sound natural and enthusiastic, "
         "not like a product listing. Do not add headings or bullet points.\n\n"
         f"ITEM: {item_title}\n"
