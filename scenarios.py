@@ -35,7 +35,27 @@ SCENARIOS = [
         "wardrobe": "empty",
         "criterion": None,
     },
-    # TODO: add what your criteria 3, 4 and 5 need.
+    {
+        # A normal matching query; criterion 3 checks the session handoff.
+        "name": "selected item reaches outfit tool",
+        "query": "vintage graphic tee under $30",
+        "wardrobe": "example",
+        "criterion": 3,
+    },
+    {
+        # The same item is run five times; criterion 4 checks each fit card.
+        "name": "fit card names item details",
+        "query": "vintage graphic tee under $30",
+        "wardrobe": "example",
+        "criterion": 4,
+    },
+    {
+        # Every returned result must respect this inclusive price ceiling.
+        "name": "price ceiling is respected",
+        "query": "graphic tee under $30",
+        "wardrobe": "example",
+        "criterion": 5,
+    },
     #
     # Set "criterion" to the number in criteria.md that the scenario tests.
     # "criterion": None means a diagnostic run — useful to have, but it isn't

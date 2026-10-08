@@ -311,6 +311,16 @@ search trace is shorter because the loop stops before \`compare_prices\`,
 
 ---
 
+## Unit 4 Stretch Plan
+
+Before implementing it, I am declaring the optional **retry with looser
+constraints** stretch: when a search with a requested size returns no listings,
+the agent will retry once without the size filter and will record that dropped
+constraint in the trace. I will account for its behavior in the run log and
+diagnosis.
+
+---
+
 ## Sample Run
 
 <!-- Two things go here.
